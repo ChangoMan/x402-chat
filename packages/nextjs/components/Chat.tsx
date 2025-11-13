@@ -2,12 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { ModelMessage } from "ai";
+import { useAccount, useWalletClient } from "wagmi";
+import { wrapFetchWithPayment } from "x402-fetch";
 
 export function Chat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ModelMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const { isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -18,13 +24,28 @@ export function Chat() {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
+    // Check wallet connection
+    if (!isConnected || !walletClient) {
+      setError("Please connect your wallet to send messages");
+      return;
+    }
+
     const userMessage: ModelMessage = { role: "user", content: input };
     setMessages(currentMessages => [...currentMessages, userMessage]);
     setInput("");
     setIsLoading(true);
+    setError(null);
 
     try {
-      const response = await fetch("/api/payment/chat", {
+      // Wrap fetch with x402 payment handling
+      // Type assertion needed due to viem version differences between wagmi and x402-fetch
+      const fetchWithPayment = wrapFetchWithPayment(
+        fetch,
+        walletClient as any,
+        BigInt(0.01 * 10 ** 6), // Max 0.01 USDC
+      );
+
+      const response = await fetchWithPayment("/api/payment/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -38,9 +59,12 @@ export function Chat() {
 
       const { messages: newMessages } = await response.json();
       setMessages(currentMessages => [...currentMessages, ...newMessages]);
-    } catch (error) {
-      console.error("Error sending message:", error);
-      // Optionally show error to user
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError(err instanceof Error ? err.message : "Failed to send message. Please try again.");
+      // Remove the user message on error
+      setMessages(currentMessages => currentMessages.filter(m => m !== userMessage));
+      setInput(input); // Restore input
     } finally {
       setIsLoading(false);
     }
@@ -63,6 +87,7 @@ export function Chat() {
           <div className="text-center text-base-content/60 mt-8">
             <p className="text-lg">Start a conversation</p>
             <p className="text-sm mt-2">Each message costs a micropayment via x402</p>
+            {!isConnected && <p className="text-sm mt-2 text-warning">⚠️ Connect your wallet to send messages</p>}
           </div>
         ) : (
           messages.map((message, index) => (
@@ -96,6 +121,24 @@ export function Chat() {
 
       {/* Input Area */}
       <div className="border-t border-base-300 p-4">
+        {error && (
+          <div className="alert alert-error mb-4">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="stroke-current shrink-0 h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>{error}</span>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <textarea
             value={input}
@@ -111,7 +154,7 @@ export function Chat() {
             disabled={isLoading}
           />
           <div className="flex justify-end">
-            <button type="submit" disabled={isLoading || !input.trim()} className="btn btn-primary">
+            <button type="submit" disabled={isLoading || !input.trim() || !isConnected} className="btn btn-primary">
               {isLoading ? (
                 <>
                   <span className="loading loading-spinner loading-sm"></span>
