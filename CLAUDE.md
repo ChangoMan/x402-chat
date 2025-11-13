@@ -35,10 +35,12 @@ yarn start          # Start Next.js dev server (localhost:3000)
 
 **Contract development:**
 ```bash
-yarn compile               # Compile Solidity contracts
-yarn hardhat:test          # Run Hardhat tests
-yarn hardhat:deploy        # Deploy contracts
-yarn send402request        # Send test request to protected API
+yarn compile                          # Compile Solidity contracts
+yarn hardhat:test                     # Run Hardhat tests
+yarn hardhat:deploy                   # Deploy contracts
+yarn send402request                   # Send test request to protected API
+yarn send402chat                      # Send test chat (default message)
+CHAT_MESSAGE="text" yarn send402chat  # Send custom chat message
 ```
 
 **Frontend:**
@@ -124,4 +126,19 @@ Required for x402 functionality:
 
 ## Testing x402 Payments
 
-Run `yarn send402request` to test protected API routes. Requires funded wallet on target network (baseSepolia faucet: https://faucet.circle.com/).
+**Command-line testing:**
+- `yarn send402request` - Test protected builder API endpoint
+- `yarn send402chat` - Test chat API with default message
+- `CHAT_MESSAGE="text" yarn send402chat` - Test chat API with custom message
+
+Requires funded wallet on target network (baseSepolia faucet: https://faucet.circle.com/). Tests use account from `packages/hardhat/.env` to sign x402 payment transactions.
+
+**Examples:**
+```bash
+# Test with default message
+yarn send402chat
+
+# Test with custom message
+CHAT_MESSAGE="What is blockchain technology?" yarn send402chat
+CHAT_MESSAGE="Explain smart contracts in simple terms" yarn send402chat
+```
